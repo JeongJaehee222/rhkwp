@@ -1,0 +1,122 @@
+import numpy as np
+
+def random_spin_field(N, M):
+    return np.random.choice([-1, 1], size=(N, M))
+
+random_spin_field(10, 10)
+
+from PIL import Image
+
+def display_spin_field(field):
+    return Image.fromarray(np.uint8((field + 1) * 0.5 * 255))  # 0 ... 255
+
+display_spin_field(random_spin_field(200, 200))
+def ising_step(field, beta=0.4):
+    N, M = field.shape
+    for n_offset in range(2):
+        for m_offset in range(2):
+            for n in range(n_offset, N, 2):
+                for m in range(m_offset, M, 2):
+                    _ising_update(field, n, m, beta)
+    return field
+
+def _ising_update(field, n, m, beta):
+    total = 0
+    N, M = field.shape
+    for i in range(n-1, n+2):
+        for j in range(m-1, m+2):
+            if i == n and j == m:
+                continue
+            total += field[i % N, j % M]
+    dE = 2 * field[n, m] * total
+    if dE <= 0:
+        field[n, m] *= -1
+    elif np.exp(-dE * beta) > np.random.rand():
+        field[n, m] *= -1
+display_spin_field(ising_step(random_spin_field(200, 200)))
+from ipywidgets import interact
+
+def display_ising_sequence(images):
+    def _show(frame=(0, len(images) - 1)):
+        return display_spin_field(images[frame])
+    return interact(_show)
+images = [random_spin_field(200, 200)]
+for i in range(200):
+    images.append(ising_step(images[-1].copy()))
+display_ising_sequence(images);
+from numpy.random import random
+import matplotlib.pyplot as plt
+
+def spin_field(rows, cols):
+    ''' generates a configuration with spins -1 and +1'''
+    return np.random.choice([-1, 1], size = (rows, cols))
+
+def neighbours(x, y, lattice, dim):
+    ''' finds the neigbours of a particular lattice point with periodic boundery conditons '''
+    top   = (x - 1, y)
+    bottom  = ((x + 1) % dim, y)
+    left    = (x, y - 1)
+    right = (x, (y + 1) % dim)
+
+    return [lattice[left[0], left[1]],
+            lattice[right[0], right[1]],
+            lattice[top[0], top[1]],
+            lattice[bottom[0], bottom[1]]
+           ]
+
+def energy_calc(x, y, lattice, dim, J, B):
+    ''' calulates the energy of the whole configuration '''
+    dE = - J * lattice[x, y] * (np.sum(neighbours(x, y, lattice, dim)) + B)
+    return dE
+
+def total_energy(lattice, dim, J, B):
+    ''' Energy of the configuration  '''
+    TE = 0
+    for x in range(dim):
+        for y in range(dim):
+            TE += - J * lattice[x, y] * (np.sum(neighbours(x, y, lattice, dim)) + B)
+    return TE
+
+mcs = 1024
+relax_sweeps = 1024
+dim = 20
+J = 1.0
+B = 0
+lattice = spin_field(dim, dim)
+
+n1 = 1.0 / (relax_sweeps * dim * dim)
+n2 = 1.0 / (relax_sweeps * relax_sweeps * dim * dim)
+
+m = 100
+index = 0
+
+quantities = np.zeros([m,5])
+
+for temp in np.linspace(1.6,3.2,m):
+    M1 = M2 = E0 = E1 = E2 = 0
+    for sweep in range(0, mcs + relax_sweeps):
+        for x in range(0,dim):
+            for y in range(0,dim):
+                dE = -2 * energy_calc(x, y, lattice, dim, J, B)
+                if (dE <= 0):
+                    lattice[x,y] *= -1
+                elif (np.exp(-1 * dE / temp) >= random()):
+                    lattice[x,y] *= -1
+                else:
+                    continue
+        if (sweep > mcs):
+            E0 = total_energy(lattice, dim, J, B)
+            E1 += E0
+            E2 += E0 * E0
+
+    quantities[index,0] = temp
+    quantities[index,1] = (E2*n1 - E1*E1*n2) / (temp*temp)
+    index += 1
+
+plt.figure(3)
+plt.plot(quantities[:,0],quantities[:,1],'k.',label='{0} x {0}'.format(str(dim)))
+plt.legend()
+plt.xlabel('Temperature')
+plt.ylabel('Specific Heat')
+plt.title('Ising Model 2D')
+plt.show()
